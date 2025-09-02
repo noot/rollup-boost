@@ -36,6 +36,8 @@ pub mod tests;
 mod payload;
 pub use payload::*;
 
+mod p2p;
+
 mod selection;
 pub use selection::*;
 
