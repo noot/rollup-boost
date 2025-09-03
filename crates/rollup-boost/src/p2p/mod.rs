@@ -21,7 +21,7 @@ pub(crate) struct Node {
     peer_id: PeerId,
     listen_addrs: Vec<libp2p::Multiaddr>,
     swarm: Swarm<Behaviour>,
-    bootnodes: Vec<Multiaddr>,
+    known_peers: Vec<Multiaddr>,
     payload_tx: mpsc::Sender<FlashblocksPayloadV1>,
     cancellation_token: tokio_util::sync::CancellationToken,
 }
@@ -54,12 +54,10 @@ impl Node {
             peer_id,
             listen_addrs,
             mut swarm,
-            bootnodes,
+            known_peers,
             payload_tx,
             cancellation_token,
         } = self;
-
-        println!("running {peer_id}");
 
         for addr in listen_addrs {
             swarm
@@ -67,19 +65,15 @@ impl Node {
                 .wrap_err("swarm failed to listen on multiaddr")?;
         }
 
-        for mut bootnode in bootnodes {
-            let peer_id = match bootnode.pop() {
+        for mut address in known_peers {
+            let peer_id = match address.pop() {
                 Some(multiaddr::Protocol::P2p(peer_id)) => peer_id,
                 _ => {
-                    eyre::bail!("no peer ID for bootnode");
+                    eyre::bail!("no peer ID for known peer");
                 }
             };
-            swarm.add_peer_address(peer_id, bootnode.clone());
-            println!("peer address {bootnode} added for {peer_id}");
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            swarm.add_peer_address(peer_id, address.clone());
         }
-
-        println!("running");
 
         let mut control = swarm.behaviour_mut().new_control();
         let mut incoming = control
@@ -96,7 +90,6 @@ impl Node {
                     break Ok(());
                 }
                 event = swarm.select_next_some() => {
-                    println!("swarm event: {event:?}");
                     match event {
                         SwarmEvent::NewListenAddr {
                             address,
@@ -125,11 +118,9 @@ impl Node {
                     }
                 },
                 stream = incoming.next() => {
-                    println!("stream?");
                     match stream {
                         Some((peer_id, stream)) => {
                             debug!("new incoming stream from peer {peer_id}");
-                            println!("new incoming stream from peer {peer_id}");
                             let payload_tx = payload_tx.clone();
                             let handle = tokio::spawn(async move {
                                 handle_incoming_stream(peer_id, stream, payload_tx).await
@@ -142,22 +133,19 @@ impl Node {
                         }
                     }
                 }
-                // res = stream_handles.next() => {
-                //     match res {
-                //         Some(Ok(Ok(()))) => {
-                //             // stream handled successfully
-                //         }
-                //         Some(Ok(Err(e))) => {
-                //             debug!("failed to handle incoming stream: {e:?}");
-                //         }
-                //         Some(Err(e)) => {
-                //             debug!("stream handling task failed: {e:?}");
-                //         }
-                //         None => {
-                //             // no more stream handles
-                //         }
-                //     }
-                // }
+                Some(res) = stream_handles.next() => {
+                    match res {
+                        Ok(Ok(())) => {
+                            // stream handled successfully
+                        }
+                        Ok(Err(e)) => {
+                            debug!("failed to handle incoming stream: {e:?}");
+                        }
+                        Err(e) => {
+                            debug!("stream handling task failed: {e:?}");
+                        }
+                    }
+                }
             }
         }
     }
@@ -167,7 +155,7 @@ pub(crate) struct NodeBuilder {
     port: Option<u16>,
     listen_addrs: Vec<libp2p::Multiaddr>,
     keypair: Option<identity::Keypair>,
-    bootnodes: Vec<Multiaddr>,
+    known_peers: Vec<Multiaddr>,
     cancellation_token: Option<tokio_util::sync::CancellationToken>,
 }
 
@@ -183,7 +171,7 @@ impl NodeBuilder {
             port: None,
             listen_addrs: Vec::new(),
             keypair: None,
-            bootnodes: Vec::new(),
+            known_peers: Vec::new(),
             cancellation_token: None,
         }
     }
@@ -203,18 +191,18 @@ impl NodeBuilder {
         self
     }
 
-    pub(crate) fn with_bootnode(mut self, bootnode: Multiaddr) -> Self {
-        self.bootnodes.push(bootnode);
+    pub(crate) fn with_known_peer(mut self, address: Multiaddr) -> Self {
+        self.known_peers.push(address);
         self
     }
 
-    pub(crate) fn with_bootnodes<I, T>(mut self, bootnodes: I) -> Self
+    pub(crate) fn with_known_peers<I, T>(mut self, addresses: I) -> Self
     where
         I: IntoIterator<Item = T>,
         T: Into<Multiaddr>,
     {
-        for bootnode in bootnodes {
-            self.bootnodes.push(bootnode.into());
+        for address in addresses {
+            self.known_peers.push(address.into());
         }
         self
     }
@@ -238,7 +226,7 @@ impl NodeBuilder {
             port,
             mut listen_addrs,
             keypair,
-            bootnodes,
+            known_peers,
             cancellation_token,
         } = self;
 
@@ -273,7 +261,7 @@ impl NodeBuilder {
                 peer_id,
                 swarm,
                 listen_addrs,
-                bootnodes,
+                known_peers,
                 payload_tx: tx,
                 cancellation_token: cancellation_token.unwrap_or_default(),
             },
@@ -312,7 +300,6 @@ async fn handle_incoming_stream(
     loop {
         match reader.next().await {
             Some(Ok(str)) => {
-                println!("got string {str}");
                 let payload: FlashblocksPayloadV1 = serde_json::from_str(&str)
                     .wrap_err("failed to decode stream message into FlashblocksPayloadV1")?;
                 let _ = payload_tx.send(payload).await; // TODO: error if receiver drops?
@@ -334,7 +321,6 @@ mod test {
 
     use super::*;
 
-    //#[tokio::test(flavor = "multi_thread")]
     #[tokio::test]
     async fn two_nodes_can_connect_and_stream() {
         use futures::SinkExt as _;
@@ -345,30 +331,28 @@ mod test {
             .unwrap();
         let node1_peer_id = node1.peer_id();
         let (node2, _, mut control2) = NodeBuilder::new()
-            .with_bootnodes(node1.multiaddrs())
+            .with_known_peers(node1.multiaddrs())
             .with_listen_addr("/ip4/127.0.0.1/tcp/9001".parse().unwrap())
             .try_build()
             .unwrap();
 
-        let handle1 = tokio::spawn(async move { node1.run().await });
-        let handle2 = tokio::spawn(async move { node2.run().await });
+        tokio::spawn(async move { node1.run().await });
+        tokio::spawn(async move { node2.run().await });
 
         // sleep to allow nodes to connect; implementing a way to get peer count is better
         tokio::time::sleep(Duration::from_secs(2)).await;
 
-        // // open stream from node1->node2
-        println!("opening stream");
+        // open stream from node1->node2
         let stream = control2
             .open_stream(node1_peer_id, FLASHBLOCKS_STREAM_PROTOCOL)
             .await
             .unwrap();
-        println!("stream opened");
 
-        // let mut writer = FramedWrite::new(stream.compat(), LinesCodec::new());
-        // let payload = serde_json::to_string(&FlashblocksPayloadV1::default()).unwrap();
-        // writer.send(payload).await.unwrap();
+        let mut writer = FramedWrite::new(stream.compat(), LinesCodec::new());
+        let payload = serde_json::to_string(&FlashblocksPayloadV1::default()).unwrap();
+        writer.send(payload).await.unwrap();
 
-        // let received = rx1.recv().await.unwrap();
-        // assert_eq!(received, FlashblocksPayloadV1::default());
+        let received = rx1.recv().await.unwrap();
+        assert_eq!(received, FlashblocksPayloadV1::default());
     }
 }
