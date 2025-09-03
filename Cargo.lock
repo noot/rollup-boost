@@ -11842,6 +11842,7 @@ dependencies = [
  "metrics-exporter-prometheus 0.16.2",
  "metrics-util 0.19.1",
  "moka",
+ "multiaddr",
  "op-alloy-consensus 0.17.2",
  "op-alloy-rpc-types-engine",
  "opentelemetry",
