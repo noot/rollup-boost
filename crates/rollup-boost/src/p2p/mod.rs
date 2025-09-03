@@ -292,7 +292,7 @@ async fn handle_incoming_stream(
     use futures::StreamExt as _;
     use tokio_util::codec::FramedRead;
     use tokio_util::codec::LinesCodec;
-    use tokio_util::compat::FuturesAsyncReadCompatExt;
+    use tokio_util::compat::FuturesAsyncReadCompatExt as _;
 
     let codec = LinesCodec::new();
     let mut reader = FramedRead::new(stream.compat(), codec);
@@ -316,7 +316,7 @@ async fn handle_incoming_stream(
 mod test {
     use tokio_util::{
         codec::{FramedWrite, LinesCodec},
-        compat::FuturesAsyncReadCompatExt,
+        compat::FuturesAsyncReadCompatExt as _,
     };
 
     use super::*;
