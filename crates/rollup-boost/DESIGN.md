@@ -67,7 +67,7 @@ pub struct FlashblocksPayloadV1 {
 
 To send it over the wire, it will be JSON-encoded, same as the current implementation. (Note: the flashblocks spec says SSZ will be used, but that doesn't seem to be the case in the implementation).
 
-[`tokio_util::codec::LinesCodec](https://caolan.github.io/tamawiki/tokio/codec/struct.LinesCodec.html) is used to read and write one message
+[`tokio_util::codec::LinesCodec`](https://caolan.github.io/tamawiki/tokio/codec/struct.LinesCodec.html) is used to read and write one message
 at a time over the wire. It's a simple codec which separates each message by a line. 
 
 ## 5. Extensions and productionization
