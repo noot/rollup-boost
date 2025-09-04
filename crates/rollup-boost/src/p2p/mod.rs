@@ -286,7 +286,7 @@ async fn handle_incoming_stream(
             Some(Ok(str)) => {
                 let payload: FlashblocksPayloadV1 = serde_json::from_str(&str)
                     .wrap_err("failed to decode stream message into FlashblocksPayloadV1")?;
-                let _ = payload_tx.send(payload).await; // TODO: error if receiver drops?
+                let _ = payload_tx.send(payload).await; 
             }
             Some(Err(e)) => {
                 return Err(e).wrap_err(format!("failed to read from stream of peer {peer_id}"));

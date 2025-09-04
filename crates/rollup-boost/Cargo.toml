@@ -13,7 +13,6 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 metrics.workspace = true
-#tokio.workspace = true
 eyre.workspace = true
 url.workspace = true
 sha2.workspace = true
@@ -29,7 +28,7 @@ tokio-tungstenite.workspace = true
 metrics-derive.workspace = true
 testcontainers.workspace = true
 
-tokio = { version = "1.43", features = ["rt-multi-thread", "signal", "sync"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "sync"] }
 
 # TODO: update to latest release when it is published
 # jsonrpsee = { version = "0.25.1", features = ["server", "http-client", "macros"] }
