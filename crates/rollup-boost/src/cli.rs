@@ -146,9 +146,16 @@ impl RollupBoostArgs {
                 flashblocks_args.flashblocks_port,
             );
 
+            let known_peers = flashblocks_args
+                .flashblocks_known_peers
+                .split(',')
+                .map(|s| s.to_string())
+                .collect();
+
             let builder_client = Arc::new(Flashblocks::run(
                 builder_client.clone(),
                 flashblocks_args.flashblocks_p2p_port,
+                known_peers,
                 outbound_addr,
             )?);
 

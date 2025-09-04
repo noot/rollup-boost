@@ -105,11 +105,21 @@ impl Behaviour {
 }
 
 impl BehaviourEvent {
-    pub(crate) async fn handle(self) {
+    pub(crate) async fn handle(self, swarm: &mut libp2p::Swarm<Behaviour>) {
         match self {
             BehaviourEvent::Autonat(_event) => {}
             BehaviourEvent::Identify(_event) => {}
-            BehaviourEvent::Mdns(_event) => {}
+            BehaviourEvent::Mdns(event) => {
+                if let mdns::Event::Discovered(list) = event {
+                    for (peer_id, addr) in list {
+                        swarm.add_peer_address(peer_id, addr.clone());
+                        tracing::info!("discovered peer {peer_id} at {addr:?}");
+                        if let Err(e) = swarm.dial(addr) {
+                            tracing::warn!("failed to dial discovered peer {peer_id}: {e:?}");
+                        }
+                    }
+                }
+            }
             BehaviourEvent::Ping(_event) => {}
         }
     }

@@ -10,7 +10,7 @@ use libp2p::{
 };
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 use crate::FlashblocksPayloadV1;
 
@@ -27,15 +27,13 @@ pub(crate) struct Node {
 }
 
 impl Node {
+    #[cfg(test)]
     pub(crate) fn peer_id(&self) -> PeerId {
         self.peer_id
     }
 
-    pub(crate) fn listen_addrs(&self) -> &[libp2p::Multiaddr] {
-        &self.listen_addrs
-    }
-
     /// Returns the multiaddresses that this node is listening on, with the peer ID included.
+    #[cfg(test)]
     pub(crate) fn multiaddrs(&self) -> Vec<libp2p::Multiaddr> {
         self.listen_addrs
             .iter()
@@ -50,14 +48,22 @@ impl Node {
     pub(crate) async fn run(self) -> eyre::Result<()> {
         use libp2p::futures::StreamExt as _;
 
+        info!("node starting with peer ID {}", self.peer_id);
+
         let Node {
-            peer_id,
+            peer_id: _,
             listen_addrs,
             mut swarm,
             known_peers,
             payload_tx,
             cancellation_token,
         } = self;
+
+        // register stream protocol before starting swarm listening
+        let mut control = swarm.behaviour_mut().new_control();
+        let mut incoming = control
+            .accept(FLASHBLOCKS_STREAM_PROTOCOL)
+            .wrap_err("failed to accept incoming streams")?;
 
         for addr in listen_addrs {
             swarm
@@ -74,11 +80,6 @@ impl Node {
             };
             swarm.add_peer_address(peer_id, address.clone());
         }
-
-        let mut control = swarm.behaviour_mut().new_control();
-        let mut incoming = control
-            .accept(FLASHBLOCKS_STREAM_PROTOCOL)
-            .wrap_err("failed to accept incoming streams")?;
 
         let mut stream_handles = FuturesUnordered::new();
 
@@ -104,23 +105,23 @@ impl Node {
                             peer_id,
                             ..
                         } => {
-                            debug!("connection established with peer {peer_id}");
+                            info!("connection established with peer {peer_id}");
                         }
                         SwarmEvent::ConnectionClosed {
                             peer_id,
                             cause,
                             ..
                         } => {
-                            debug!("connection closed with peer {peer_id}: {cause:?}");
+                            info!("connection closed with peer {peer_id}: {cause:?}");
                         }
-                        SwarmEvent::Behaviour(event) => event.handle().await,
+                        SwarmEvent::Behaviour(event) => event.handle(&mut swarm).await,
                         _ => continue,
                     }
                 },
                 stream = incoming.next() => {
                     match stream {
                         Some((peer_id, stream)) => {
-                            debug!("new incoming stream from peer {peer_id}");
+                            info!("new incoming stream from peer {peer_id}");
                             let payload_tx = payload_tx.clone();
                             let handle = tokio::spawn(async move {
                                 handle_incoming_stream(peer_id, stream, payload_tx).await
@@ -139,10 +140,10 @@ impl Node {
                             // stream handled successfully
                         }
                         Ok(Err(e)) => {
-                            debug!("failed to handle incoming stream: {e:?}");
+                            warn!("failed to handle incoming stream: {e:?}");
                         }
                         Err(e) => {
-                            debug!("stream handling task failed: {e:?}");
+                            warn!("stream handling task failed: {e:?}");
                         }
                     }
                 }
@@ -181,18 +182,9 @@ impl NodeBuilder {
         self
     }
 
+    #[cfg(test)]
     pub(crate) fn with_listen_addr(mut self, addr: libp2p::Multiaddr) -> Self {
         self.listen_addrs.push(addr);
-        self
-    }
-
-    pub(crate) fn with_keypair(mut self, keypair: identity::Keypair) -> Self {
-        self.keypair = Some(keypair);
-        self
-    }
-
-    pub(crate) fn with_known_peer(mut self, address: Multiaddr) -> Self {
-        self.known_peers.push(address);
         self
     }
 
@@ -204,14 +196,6 @@ impl NodeBuilder {
         for address in addresses {
             self.known_peers.push(address.into());
         }
-        self
-    }
-
-    pub(crate) fn with_cancellation_token(
-        mut self,
-        cancellation_token: tokio_util::sync::CancellationToken,
-    ) -> Self {
-        self.cancellation_token = Some(cancellation_token);
         self
     }
 
