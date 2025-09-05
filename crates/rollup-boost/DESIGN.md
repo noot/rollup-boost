@@ -41,11 +41,16 @@ Another consideration here is privacy and security. Having a public network with
 
 ## 3. PoC implementation
 
+### Assumptions
+
+- there is only one builder per network. Multiple builders on one network causes significant complexity as flashblock equivocation is not allowed, so some sort of builder rotation algorithm must be implemented.
+- the p2p address of the builder is well-known.
+- the builder going down is out of scope for the PoC.
+
 ### Topology
 
-I will implement the direct p2p connection approach in 2.1 for the PoC, as it's the most straightforward and can be extended easily. A gossip network, while intriguing, 
+I will implement the direct p2p connection approach in 2.1 for the PoC, as it's the most straightforward and can be extended easily. A gossip network, while having benefits, 
 has latency concerns which may make it infeasible without further research and design. For discovery, I will implement connecting to known peers via config as well as mDNS.
-Since it's a PoC, we can assume nodes are either local or well-known.
 
 ### Message protocol
 
@@ -82,3 +87,12 @@ On the code-level, the following is needed for productionization:
 On the features level:
 - connection handling, such as [keep-alive](https://docs.rs/libp2p/latest/libp2p/swarm/trait.ConnectionHandler.html#method.connection_keep_alive) for rbuilder nodes, as we wish to 
 permanently stay connected to them.
+- a builder failure protocol in case the single builder fails. 
+
+To extend the network to a gossip network, the following should be implemented:
+- signing of the `FlashblocksPayloadV1` by the builder
+- a DHT for discovery of distributed peers
+
+To extend the network to multiple builders, the following should be implemented:
+- a builder-selection algorithm which determines which builder is authorized to build flashblocks at a point in time. 
+- since the list of potential builders is well-known, it should be straightforward to implement round-robin, with fallback to the next builder in the sequence in the case of failure.
