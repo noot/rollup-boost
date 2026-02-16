@@ -141,17 +141,22 @@ impl RollupBoostArgs {
 
         let (rpc_module, health_handle): (RpcModule<()>, _) = if self.flashblocks.flashblocks {
             let flashblocks_args = self.flashblocks;
-            let inbound_url = flashblocks_args.flashblocks_builder_url;
             let outbound_addr = SocketAddr::new(
                 IpAddr::from_str(&flashblocks_args.flashblocks_host)?,
                 flashblocks_args.flashblocks_port,
             );
 
+            let known_peers = flashblocks_args
+                .flashblocks_known_peers
+                .split(',')
+                .map(|s| s.to_string())
+                .collect();
+
             let builder_client = Arc::new(Flashblocks::run(
                 builder_client.clone(),
-                inbound_url,
+                flashblocks_args.flashblocks_p2p_port,
+                known_peers,
                 outbound_addr,
-                flashblocks_args.flashblock_builder_ws_reconnect_ms,
             )?);
 
             let rollup_boost = RollupBoostServer::new(

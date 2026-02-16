@@ -1,20 +1,20 @@
 use metrics::{Counter, Gauge, Histogram};
 use metrics_derive::Metrics;
 
-#[derive(Metrics, Clone)]
-#[metrics(scope = "flashblocks.ws_inbound")]
-pub struct FlashblocksWsInboundMetrics {
-    /// Total number of WebSocket reconnection attempts
-    #[metric(describe = "Total number of WebSocket reconnection attempts")]
-    pub reconnect_attempts: Counter,
+// #[derive(Metrics, Clone)]
+// #[metrics(scope = "flashblocks.ws_inbound")]
+// pub struct FlashblocksWsInboundMetrics {
+//     /// Total number of WebSocket reconnection attempts
+//     #[metric(describe = "Total number of WebSocket reconnection attempts")]
+//     pub reconnect_attempts: Counter,
 
-    /// Current WebSocket connection status (1 = connected, 0 = disconnected)
-    #[metric(describe = "Current WebSocket connection status")]
-    pub connection_status: Gauge,
+//     /// Current WebSocket connection status (1 = connected, 0 = disconnected)
+//     #[metric(describe = "Current WebSocket connection status")]
+//     pub connection_status: Gauge,
 
-    #[metric(describe = "Number of flashblock messages received from builder")]
-    pub messages_received: Counter,
-}
+//     #[metric(describe = "Number of flashblock messages received from builder")]
+//     pub messages_received: Counter,
+// }
 
 #[derive(Metrics, Clone)]
 #[metrics(scope = "flashblocks.service")]
